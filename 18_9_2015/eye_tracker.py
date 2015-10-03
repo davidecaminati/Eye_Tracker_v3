@@ -9,7 +9,10 @@ import argparse
 import time
 import cv2
 
-import scipy.spatial
+#talk with arduinos
+import serial
+
+#import scipy.spatial
 
 from collections import Counter
 from fase1 import Fase1
@@ -44,7 +47,49 @@ class Eye_tracker:
 	w = 0
 	h = 0
 	point_of_rotation = (1,1) #initial fake point
-	eye_detected = 0
+	eye_detected = 0 
+	serial_motor  = None
+	serial_monitor  = None
+
+	
+	def find_usb_port(self)
+		ser0 = serial.Serial('/dev/ttyACM0', 9600, timeout=1) # Establish the connection on a specific port
+		ser1 = serial.Serial('/dev/ttyACM1', 9600,timeout=1) # Establish the connection on a specific port
+		time.sleep(1.5)
+		device_ser0 = True
+		
+		while device_ser0:
+			ser0.write("?")
+			ser0.write("\n")
+			time.sleep(0.01)
+			data = ser0.readline()
+			if data[:5] == "motor":
+				serial_motor = ser0
+				device_ser0 = False
+			if data[:5] == "displ":
+				serial_monitor = ser0
+				device_ser0 = False
+		
+		device_ser1 = True
+		while device_ser1:
+			ser1.write("?")
+			ser1.write("\n")
+			time.sleep(0.01)
+			data = ser1.readline()
+			if data[:5] == "motor":
+				serial_motor = ser1
+				device_ser1 = False
+			if data[:5] == "displ":
+				serial_monitor = ser1
+				device_ser1 = False
+		
+		print serial_motor
+		print "serial_motor"
+		print serial_monitor
+		print "serial_monitor"
+		
+		
+	
 	
 	def __init__(self,debug,static_optimization = True,eye = 0,video = None):
 		self.debug = debug
@@ -52,11 +97,9 @@ class Eye_tracker:
 		self.eye = eye
 		self.video = video
 		
-    
 	def start(self):
 		#find camera or video path
-		video_src = self.video if (self.video != None) else self.findCamera()
-
+		video_src = self.video if (self.video != 0) else self.findCamera()
 		# Set camera for capture frames from the input
 		self.camera = cv2.VideoCapture(video_src)
 		
@@ -209,7 +252,8 @@ class Eye_tracker:
 	def findCamera(self):
 		# check if we running on UDOO board ( in udoo the USB webcam is /dev/video3 )
 		name = socket.gethostname()
-		if name == 'udoobuntu':
+		print name
+		if name == "udoobuntu":
 			return 3
 		else:
 			return 0
@@ -262,7 +306,7 @@ class Eye_tracker:
 			if (_frame_number % 60*30*10) == 0 or _frame_number == 0:
 				error, rotation = self.adjust_image_rotation(10)
 				if error:
-					return 0
+					return 0,[]
 			'''
 			# test rotation with the first 10 frames
 			if i <= 10:  
@@ -307,7 +351,7 @@ class Eye_tracker:
 				break
 				
 		if ((_number_frame_1_eye + _number_frame_2_eye) / number_frame_to_check) < _accuracy:
-			return 0
+			return 0,rects
 		else:
 			if _number_frame_1_eye /2 >  _number_frame_2_eye:
 				return 1,rects
@@ -478,7 +522,7 @@ class Eye_tracker:
 		rectArray = []
 		number_common_rect = 0
 		b = Counter(rectArray)
-		while number_common_rect < 10: #at least 3 entry of the same rect
+		while number_common_rect < 3: #at least 3 entry of the same rect
 
 			start = time.time()
 			

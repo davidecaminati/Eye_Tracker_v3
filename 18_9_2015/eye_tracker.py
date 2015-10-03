@@ -52,43 +52,6 @@ class Eye_tracker:
 	serial_monitor  = None
 
 	
-	def find_usb_port(self)
-		ser0 = serial.Serial('/dev/ttyACM0', 9600, timeout=1) # Establish the connection on a specific port
-		ser1 = serial.Serial('/dev/ttyACM1', 9600,timeout=1) # Establish the connection on a specific port
-		time.sleep(1.5)
-		device_ser0 = True
-		
-		while device_ser0:
-			ser0.write("?")
-			ser0.write("\n")
-			time.sleep(0.01)
-			data = ser0.readline()
-			if data[:5] == "motor":
-				serial_motor = ser0
-				device_ser0 = False
-			if data[:5] == "displ":
-				serial_monitor = ser0
-				device_ser0 = False
-		
-		device_ser1 = True
-		while device_ser1:
-			ser1.write("?")
-			ser1.write("\n")
-			time.sleep(0.01)
-			data = ser1.readline()
-			if data[:5] == "motor":
-				serial_motor = ser1
-				device_ser1 = False
-			if data[:5] == "displ":
-				serial_monitor = ser1
-				device_ser1 = False
-		
-		print serial_motor
-		print "serial_motor"
-		print serial_monitor
-		print "serial_monitor"
-		
-		
 	
 	
 	def __init__(self,debug,static_optimization = True,eye = 0,video = None):
@@ -98,6 +61,8 @@ class Eye_tracker:
 		self.video = video
 		
 	def start(self):
+		#find USB device
+		self.find_usb_port()
 		#find camera or video path
 		video_src = self.video if (self.video != 0) else self.findCamera()
 		# Set camera for capture frames from the input
@@ -108,7 +73,7 @@ class Eye_tracker:
 		self.fase1_resolution = self.set_camera_res(self.camera,w,h)
 		print "inizio"
 		
-		number_eyes,rects = self.count_eye_detected(50,True)
+		number_eyes,rects = self.count_eye_detected(5,True)
 		
 		if number_eyes == 2:
 			EyeROI = rects[0]
@@ -134,6 +99,43 @@ class Eye_tracker:
 			'''
 		else:
 			print "errore nel riconoscimento occhi"
+		
+
+	def find_usb_port(self):
+		ser0 = serial.Serial('/dev/ttyACM0', 9600, timeout=1) # Establish the connection on a specific port
+		ser1 = serial.Serial('/dev/ttyACM1', 9600,timeout=1) # Establish the connection on a specific port
+		time.sleep(1.5)
+		device_ser0 = True
+		
+		while device_ser0:
+			ser0.write("?")
+			ser0.write("\n")
+			time.sleep(0.01)
+			data = ser0.readline()
+			if data[:5] == "motor":
+				self.serial_motor = ser0
+				device_ser0 = False
+			if data[:5] == "displ":
+				self.serial_monitor = ser0
+				device_ser0 = False
+		
+		device_ser1 = True
+		while device_ser1:
+			ser1.write("?")
+			ser1.write("\n")
+			time.sleep(0.01)
+			data = ser1.readline()
+			if data[:5] == "motor":
+				self.serial_motor = ser1
+				device_ser1 = False
+			if data[:5] == "displ":
+				self.serial_monitor = ser1
+				device_ser1 = False
+		
+		print self.serial_motor
+		print "self.serial_motor"
+		print self.serial_monitor
+		print "self.serial_monitor"
 		
 		
 	def HarrisCorners(self):
@@ -288,8 +290,13 @@ class Eye_tracker:
 		_number_frame_2_eye = 0.0
 		_number_frame_to_check = number_frame_to_check
 		_show_rectangle = show_rectangle
-
+		#print self.serial_motor
+		if self.serial_motor != None:
+				self.serial_motor.write("--1\n")
+				self.serial_motor.write("--2\n")
+				print("spengo le luci")
 		
+		#print("dovrei aver spento le luci ")
 		while _frame_number < _number_frame_to_check:
 			#print _frame_number
 			(grabbed, frame) = self.camera.read()		
@@ -331,10 +338,25 @@ class Eye_tracker:
 			# detect eyes in the image
 			rects = self.et.track(gray)
 			_frame_number += 1
+			if len(rects) == 0:
+				#turn off the led of the eyes
+				if self.serial_motor != None:
+						self.serial_motor.write("--1\n")
+						self.serial_motor.write("--2\n")
 			if len(rects) == 1:
 				_number_frame_1_eye += 1
+				#light the led of the eyes detected
+				if self.serial_motor != None:
+						if rects[0] > frame.shape[:2][1]:
+							self.serial_motor.write("++1\n")
+						else:
+							self.serial_motor.write("++2\n")
 			if len(rects) == 2:
 				_number_frame_2_eye += 1
+				#light the led of the eyes detected
+				if self.serial_motor != None:
+						self.serial_motor.write("++1\n")
+						self.serial_motor.write("++2\n")
 					
 			if _show_rectangle:
 				# loop over the eyes bounding boxes and draw them
@@ -349,6 +371,7 @@ class Eye_tracker:
 			# if the 'q' key is pressed, stop the loop (Note: waitKey are necessary for display camera output)
 			if cv2.waitKey(1) & 0xFF == ord("q"):
 				break
+		
 				
 		if ((_number_frame_1_eye + _number_frame_2_eye) / number_frame_to_check) < _accuracy:
 			return 0,rects
@@ -376,7 +399,7 @@ class Eye_tracker:
 			(grabbed, frame) = self.camera.read()
 			w,h = frame.shape[:2]
 			self.point_of_rotation = (h/2,w/2)
-			print "w,h" ,w,h
+			#print "w,h" ,w,h
 			#time.sleep(2)
 			if not grabbed:
 				print "no grab"
@@ -424,6 +447,11 @@ class Eye_tracker:
 				
 				cv2.imshow("rotated", img)	
 				if len(rects) == 2:
+					
+					#turn off the led of the eyes
+					if self.serial_motor != None:
+							self.serial_motor.write("++1\n")
+							self.serial_motor.write("++2\n")
 					#self.point_of_rotation = ((rects[0][0] +rects[0][2])/2,(rects[0][1]+rects[0][3])/2)
 					
 					y1 = (rects[0][3] - rects[0][1]) /2 + rects[0][1]
@@ -445,7 +473,7 @@ class Eye_tracker:
 					if y_left < y_right:
 						rotation += 0.3 +round(random.random(), 2)
 					
-					print rotation
+					#print rotation
 					if y_left == y_right:
 						break
 					# if the 'q' key is pressed, stop the loop (Note: waitKey are necessary for display camera output)
@@ -453,8 +481,19 @@ class Eye_tracker:
 						break
 				
 				if len(rects) != 2:
+					if len(rects) == 1:
+						#turn off the led of the eyes
+						if self.serial_motor != None:
+							self.serial_motor.write("--1\n")
+							self.serial_motor.write("--2\n")
+							time.sleep(0.1)
+						if rects[0][0] < w/2: 
+							self.serial_motor.write("++1\n")# sinistro?
+						else:
+							self.serial_motor.write("++2\n")# destro?
+							
 					print "occhi non rilevati" 
-					rotation = random.randrange(-30,30)
+					rotation = random.randrange(-20,20)
 					_max_fail -= 1
 				if _max_fail == 0:
 					error = True
